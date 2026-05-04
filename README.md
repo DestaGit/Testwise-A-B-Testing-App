@@ -1,2 +1,81 @@
-# Testwise-A-B-Testing-App
- TestWise is a simple client-side A/B testing application that helps users compare two variants and make a decision using conversion rate, uplift, z-score, p-value, and decision labels.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TestWise — A/B Testing App</title>
+<style>
+:root{--bg:#f4f7fb;--card:#fff;--primary:#0f766e;--primary-dark:#115e59;--text:#111827;--muted:#6b7280;--border:#dbe4ef}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(135deg,#0f172a,#0f766e);color:white;padding:24px}
+header h1{margin:0}header p{margin:6px 0 0;font-size:14px;color:#d1fae5}
+.container{max-width:1000px;margin:20px auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+label{display:block;font-size:13px;font-weight:bold;margin:10px 0 4px}
+input,textarea{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:10px}
+textarea{min-height:100px}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+button{border:none;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:bold}
+.primary{background:var(--primary);color:white}.primary:hover{background:var(--primary-dark)}
+.danger{background:#fee2e2;color:#991b1b}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi{border:1px solid var(--border);padding:12px;border-radius:10px}
+.kpi span{color:var(--muted);font-size:12px}.kpi strong{font-size:20px}
+.badge{padding:4px 8px;border-radius:999px;font-size:12px;font-weight:bold}.adopt{background:#dcfce7;color:#166534}.continue{background:#fef3c7;color:#92400e}.reject{background:#fee2e2;color:#991b1b}
+.msg{margin-top:10px;padding:10px;border-radius:10px;display:none}.msg.show{display:block}.error{background:#fee2e2;color:#991b1b}.success{background:#dcfce7;color:#166534}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid var(--border);font-size:13px}
+canvas{width:100%;height:260px;border:1px solid var(--border);border-radius:10px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header><h1>TestWise</h1><p>Simple A/B testing → decision output</p></header>
+<div class="container">
+<div class="card">
+<h2>Input</h2>
+<label>Experiment Name</label><input id="name">
+<div class="grid">
+<div><h4>Variant A</h4><label>Visitors</label><input id="va" type="number"><label>Conversions</label><input id="ca" type="number"></div>
+<div><h4>Variant B</h4><label>Visitors</label><input id="vb" type="number"><label>Conversions</label><input id="cb" type="number"></div>
+</div>
+<div class="btns"><button class="primary" onclick="run()">Run Test</button><button onclick="sample()">Sample</button><button onclick="resetApp()">Reset</button></div>
+<div id="error" class="msg error"></div>
+</div>
+<div class="card">
+<h2>Results</h2>
+<div class="kpis">
+<div class="kpi"><span>A</span><strong id="ra">—</strong></div><div class="kpi"><span>B</span><strong id="rb">—</strong></div><div class="kpi"><span>Uplift</span><strong id="uplift">—</strong></div>
+<div class="kpi"><span>Z</span><strong id="z">—</strong></div><div class="kpi"><span>P</span><strong id="p">—</strong></div><div class="kpi"><span>Decision</span><strong id="d">—</strong></div>
+</div>
+<p id="rec">Run test to see recommendation</p>
+</div>
+<div class="card"><h2>Chart</h2><canvas id="chart" width="800" height="260"></canvas></div>
+<div class="card"><h2>Save / Export</h2><div class="btns"><button class="primary" onclick="save()">Save</button><button onclick="exportCSV()">CSV</button><button onclick="exportJSON()">JSON</button><button class="danger" onclick="clearHistory()">Clear</button></div></div>
+<div class="card"><h2>History</h2><table><thead><tr><th>#</th><th>Name</th><th>Winner</th><th>Decision</th></tr></thead><tbody id="hist"></tbody></table></div>
+</div>
+<script>
+let current=null;let history=JSON.parse(localStorage.getItem("tw"))||[];
+function err(msg){let e=document.getElementById("error");e.innerText=msg;e.classList.add("show")}
+function clearErr(){document.getElementById("error").classList.remove("show")}
+function run(){clearErr();let va=+document.getElementById("va").value,vb=+document.getElementById("vb").value,ca=+document.getElementById("ca").value,cb=+document.getElementById("cb").value;
+if(!va||!vb){err("Visitors required");return}if(ca<0||cb<0){err("Conversions cannot be negative");return}if(ca>va||cb>vb){err("Conversions invalid");return}
+let ra=ca/va,rb=cb/vb,uplift=(rb-ra)/ra,pooled=((ra*va)+(rb*vb))/(va+vb),se=Math.sqrt(pooled*(1-pooled)*(1/va+1/vb)),z=se?((rb-ra)/se):0,p=2*(1-cdf(Math.abs(z))),winner=rb>ra?"B":ra>rb?"A":"Tie",decision=(p<0.05&&uplift>0.02)?"Adopt":uplift>0?"Continue":"Reject";
+current={name:document.getElementById("name").value||"Test",ra,rb,uplift,z,p,winner,decision};render()}
+function render(){let r=current;document.getElementById("ra").innerText=(r.ra*100).toFixed(2)+"%";document.getElementById("rb").innerText=(r.rb*100).toFixed(2)+"%";document.getElementById("uplift").innerText=(r.uplift*100).toFixed(2)+"%";document.getElementById("z").innerText=r.z.toFixed(2);document.getElementById("p").innerText=r.p.toFixed(3);document.getElementById("d").innerHTML='<span class="badge '+r.decision.toLowerCase()+'">'+r.decision+'</span>';document.getElementById("rec").innerText="Winner: "+r.winner+" → "+r.decision;draw()}
+function draw(){let c=document.getElementById("chart"),ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);let a=current.ra*100,b=current.rb*100,max=Math.max(10,a,b)*1.25;ctx.fillStyle="#111827";ctx.font="16px Arial";ctx.fillText("Conversion Rate",40,30);ctx.fillStyle="#2563eb";ctx.fillRect(170,220-(a/max)*180,90,(a/max)*180);ctx.fillStyle="#0f766e";ctx.fillRect(390,220-(b/max)*180,90,(b/max)*180);ctx.fillStyle="#111827";ctx.fillText("A "+a.toFixed(2)+"%",170,245);ctx.fillText("B "+b.toFixed(2)+"%",390,245)}
+function save(){if(!current){err("Run test first");return}history.unshift(current);localStorage.setItem("tw",JSON.stringify(history));renderHistory()}
+function renderHistory(){let h=document.getElementById("hist");h.innerHTML=history.length?history.map((x,i)=>`<tr><td>${i+1}</td><td>${x.name}</td><td>${x.winner}</td><td>${x.decision}</td></tr>`).join(""):"<tr><td colspan=4>No data</td></tr>"}
+function exportCSV(){if(!current){err("Run test");return}let csv="name,ra,rb,uplift,z,p,decision\\n"+`${current.name},${current.ra},${current.rb},${current.uplift},${current.z},${current.p},${current.decision}`;download("result.csv",csv)}
+function exportJSON(){if(!current){err("Run test");return}download("result.json",JSON.stringify(current,null,2))}
+function download(name,data){let a=document.createElement("a");a.href=URL.createObjectURL(new Blob([data]));a.download=name;a.click()}
+function clearHistory(){history=[];localStorage.removeItem("tw");renderHistory()}
+function sample(){document.getElementById("name").value="Homepage CTA Test";document.getElementById("va").value=1000;document.getElementById("ca").value=80;document.getElementById("vb").value=1000;document.getElementById("cb").value=110}
+function resetApp(){location.reload()}
+function cdf(x){return(1+erf(x/Math.sqrt(2)))/2}
+function erf(x){let s=x>=0?1:-1;x=Math.abs(x);let t=1/(1+0.3275911*x);let y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);return s*y}
+renderHistory();
+</script>
+</body>
+</html>
